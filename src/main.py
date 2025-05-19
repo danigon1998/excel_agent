@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 from data_handler import load_excel_files, save_dataframe_to_excel
+from data_processor import consolidate_all_cost, calculate_total_cost_per_collaborator
 
 from dotenv import load_dotenv
 
@@ -21,29 +22,36 @@ def main():
 
     print("Chaves de DataFrames disponiveis:", list(loaded_dataframes.keys()))
 
-    colaboradores_df_key = None
-    for key in loaded_dataframes.keys():
-        if "colaboradores" in key.lower():
-            colaboradores_df_key = key
-            break
+    print("Iniciando processo de consolidação e cálculo de custos")
 
-    if colaboradores_df_key:
-        df_to_save = loaded_dataframes[colaboradores_df_key]
-        output_path = Path("data/output")
-        output_file_name = "colaboradores_estandarizados.xlsx"
-        output_file_path = output_path / output_file_name
+    consolidated_df = consolidate_all_cost(loaded_dataframes)
 
-        print(f"Tentando guardar {colaboradores_df_key} em {output_file_path}")
-        saved_path = save_dataframe_to_excel(df_to_save, output_file_path)
+    if consolidated_df.empty:
+        print("Erro: DataFrame consolidado está vazio.")
+        return
+    print("Consolidação e cálculo de custos concluídos")
+    print(consolidated_df.head())
+    print("Colunas do DataFrame Consolidado")
+    print(consolidated_df.columns.to_list())
 
-        if saved_path:
-            print(f"Arquivo salvo com sucesso em {saved_path}")
-        else:
-            print(
-                f"Erro ao salvar o arquivo {colaboradores_df_key} em {output_file_path}"
-            )
+    final_cost_df = calculate_total_cost_per_collaborator(consolidated_df)
+
+    print("Vista Previa")
+    print(final_cost_df.head())
+    print("Processo concluído")
+    print(final_cost_df.columns.to_list())
+
+    print("Guardando o DataFrame final no arquivo Excel")
+    output_dir = Path("data/output")
+    output_filename = "Relatorio custos consolidados.xlsx"
+    output_path = output_dir / output_filename
+
+    saved_path = save_dataframe_to_excel(final_cost_df, output_path)
+
+    if saved_path:
+        print(f"DataFrame salvo com sucesso em {saved_path}.")
     else:
-        print("Erro: DataFrame de colaboradores não encontrado.")
+        print("Erro ao salvar o DataFrame.")
 
 
 if __name__ == "__main__":
