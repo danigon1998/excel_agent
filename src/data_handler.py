@@ -42,7 +42,7 @@ COLUNA_MAPEIO_POR_TIPO = {
     },
     "github": {  # Para planilha "Ferramenta 1 - Github.xlsx"
         "Assinante": "Nome Colaborador",
-        "Docuemento": "CPF Colaborador",
+        "Documento": "CPF Colaborador",
         "Data Ativacao": "Data Ativacao Github",
         "Copilot": "Custo Copilot Github",
         "Licença": "Custo Licenca Github",
