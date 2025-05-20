@@ -11,6 +11,7 @@ from src.data_handler import load_excel_files, save_dataframe_to_excel
 from src.data_processor import perform_full_cost_analysis
 
 _GLOBAL_LOADED_DATAFRAMES = {}
+_GLOBAL_PROCESSED_DATAFRAME = None
 
 
 @tool
@@ -60,6 +61,7 @@ def analyze_and_calculate_all_costs():
     """
     print(f"\n[Tool Call] Chamando analyze_and_calculate_all_costs")
     global _GLOBAL_LOADED_DATAFRAMES
+    global _GLOBAL_PROCESSED_DATAFRAME
 
     if not _GLOBAL_LOADED_DATAFRAMES:
         return (
@@ -69,7 +71,10 @@ def analyze_and_calculate_all_costs():
     result_df = perform_full_cost_analysis(_GLOBAL_LOADED_DATAFRAMES)
 
     if result_df.empty:
+        _GLOBAL_PROCESSED_DATAFRAME = pd.DataFrame()
         return "A análise de custos não produziu resultados. O DataFrame consolidado está vazio."
+
+    _GLOBAL_PROCESSED_DATAFRAME = result_df
 
     return (
         "Análise de custos concluída. O custo total por colaborador foi calculado. "
@@ -79,7 +84,7 @@ def analyze_and_calculate_all_costs():
 
 
 @tool
-def save_processed_data(df, output_path: str):
+def save_processed_data(output_path: str):
     """
     Salva um DataFrame do Pandas em um arquivo Excel (.xlsx) no caminho especificado.
     Esta ferramenta é útil para persistir resultados de análises.
@@ -90,8 +95,12 @@ def save_processed_data(df, output_path: str):
     Retorna o caminho do arquivo salvo em caso de sucesso, ou uma mensagem de erro.
     """
     print(f"\n[Tool Call] Chamando save_processed_data para o arquivo: {output_path}")
+
+    global _GLOBAL_PROCESSED_DATAFRAME
+    if _GLOBAL_PROCESSED_DATAFRAME is None or _GLOBAL_PROCESSED_DATAFRAME.empty:
+        return "Erro: Nenhum DataFrame processado para salvar. Execute 'analyze_and_calculate_all_costs' primeiro."
     path_obj = Path(output_path)
-    return save_dataframe_to_excel(df, path_obj)
+    return save_dataframe_to_excel(_GLOBAL_PROCESSED_DATAFRAME, path_obj)
 
 
 def setup_llm():
@@ -119,12 +128,13 @@ def setup_agent():
                 "system",
                 "Você é um assistente de análise de dados especializado em custos de colaboradores, "
                 "ferramentas e benefícios. Sua função é responder a perguntas usando as ferramentas disponíveis. "
-                "Sempre comece carregando os dados usando a ferramenta 'load_data' do diretório 'data/input'. "
-                "Depois de carregar, se a pergunta envolver custos totais ou consolidação, use 'analyze_and_calculate_all_costs'. "
-                "Se o usuário pedir para salvar algo, use 'save_processed_data'. "
+                "--- FLUXO DE TRABALHO PADRÃO: ---\n"
+                "1. **Sempre comece** carregando os dados usando a ferramenta `load_data` do diretório **'data/input'**. "
+                "2. **Após carregar os dados**, se a pergunta envolver custos totais ou consolidação, use a ferramenta `analyze_and_calculate_all_costs`. "
+                "3. **Após a análise ser concluída**, se o usuário pedir para salvar o resultado, use a ferramenta `save_processed_data` com o caminho **'data/output/relatorio_final.xlsx'**.\n"  # Aqui especificamos o caminho fixo.
+                "--- COMPORTAMENTO GERAL: ---\n"
                 "Seja conciso e direto nas suas respostas. "
-                "Se você não tiver as informações necessárias ou as ferramentas para responder, diga isso claramente."
-                "Ao final da sua análise, se pertinente, mostre as primeiras 5 linhas do DataFrame resultante.",
+                "Se você não tiver as informações necessárias ou as ferramentas para responder, diga isso claramente.",
             ),
             ("user", "{input}"),
             (
