@@ -137,7 +137,11 @@ def save_processed_data(output_path: str):
     if _GLOBAL_PROCESSED_DATAFRAME is None or _GLOBAL_PROCESSED_DATAFRAME.empty:
         return "Erro: Nenhum DataFrame processado para salvar. Execute 'analyze_and_calculate_all_costs' primeiro."
     path_obj = Path(output_path)
-    return save_dataframe_to_excel(_GLOBAL_PROCESSED_DATAFRAME, path_obj)
+    saved_path = save_dataframe_to_excel(_GLOBAL_PROCESSED_DATAFRAME, path_obj)
+    if saved_path is None:
+        return f"Erro ao salvar o DataFrame em {output_path}."
+
+    return f"DataFrame salvo com sucesso em {saved_path}"
 
 
 def setup_llm():
