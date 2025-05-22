@@ -172,6 +172,7 @@ def save_dataframe_to_excel(
             return None
 
     output_dir = output_path.parent
+
     if not output_dir.exists():
         try:
             output_dir.mkdir(parents=True, exist_ok=True)
@@ -179,6 +180,18 @@ def save_dataframe_to_excel(
         except Exception as e:
             print(f"Erro ao criar o diretório {output_dir}: {e}")
             return None
+
+    if output_path.exists():
+        base_name = output_path.stem
+        extension = output_path.suffix
+        i = 1
+        while True:
+            new_name = f"{base_name}_{i}{extension}"
+            new_path = output_dir / new_name
+            if not new_path.exists():
+                output_path = new_path
+                break
+            i += 1
 
     try:
         df.to_excel(output_path, sheet_name=sheet_name, index=index)

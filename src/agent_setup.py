@@ -2,7 +2,9 @@ import os
 import pandas as pd
 from pathlib import Path
 
-from langchain_groq import ChatGroq  # ChatGroq para poder usar o modelo Llama3-70b
+from langchain_groq import (
+    ChatGroq,
+)  # ChatGroq para poder usar os diversos modelos que sejam considerados necessários
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
@@ -11,6 +13,44 @@ from src.data_handler import load_excel_files, save_dataframe_to_excel
 from src.data_processor import perform_full_cost_analysis
 
 _GLOBAL_LOADED_DATAFRAMES = {}
+_GLOBAL_PROCESSED_DATAFRAME = None
+
+
+SYSTEM_PROMPT = """
+Você é um agente de análise de custos que entende solicitações em linguagem natural e executa ferramentas passo a passo para realizar cálculos sobre dados organizacionais.
+
+Seu objetivo principal é ajudar o usuário a entender e analisar custos por colaborador, com base em arquivos como planilhas de salários, benefícios e ferramentas. Sempre que possível, você deve executar ferramentas de maneira precisa, explicando seu raciocínio antes de agir.
+
+Aqui está um exemplo de como você deve pensar e agir:
+
+Exemplo:
+Usuário: Preciso saber o custo total por pessoa para os dados em 'data/input'. Por favor, salve os resultados em um arquivo.
+
+Pensamento: O usuário quer que eu carregue os dados, analise os custos por pessoa e salve o resultado.
+
+Ação: load_data
+
+Observação: Dados carregados com sucesso.
+
+Pensamento: Agora preciso calcular os custos por pessoa.
+
+Ação: analyze_and_calculate_all_costs
+
+Observação: Análise de custos concluída.
+
+Pensamento: O usuário pediu para salvar os resultados, então agora devo executar a ferramenta de salvamento.
+
+Ação: save_processed_data
+
+Observação: Arquivo salvo em 'data/output/relatorio_final.xlsx'.
+
+Pensamento: A tarefa foi concluída com sucesso.
+
+--- Fim do exemplo ---
+
+A cada nova solicitação, pense passo a passo. Use ferramentas apenas quando fizer sentido. 
+Se o usuário pedir para salvar, gere o arquivo após a análise.
+"""
 
 
 @tool
@@ -60,6 +100,7 @@ def analyze_and_calculate_all_costs():
     """
     print(f"\n[Tool Call] Chamando analyze_and_calculate_all_costs")
     global _GLOBAL_LOADED_DATAFRAMES
+    global _GLOBAL_PROCESSED_DATAFRAME
 
     if not _GLOBAL_LOADED_DATAFRAMES:
         return (
@@ -69,17 +110,20 @@ def analyze_and_calculate_all_costs():
     result_df = perform_full_cost_analysis(_GLOBAL_LOADED_DATAFRAMES)
 
     if result_df.empty:
+        _GLOBAL_PROCESSED_DATAFRAME = pd.DataFrame()
         return "A análise de custos não produziu resultados. O DataFrame consolidado está vazio."
+
+    _GLOBAL_PROCESSED_DATAFRAME = result_df
 
     return (
         "Análise de custos concluída. O custo total por colaborador foi calculado. "
-        "As primeiras 5 linhas do DataFrame resultante são:\n"
-        + result_df.head().to_markdown(index=False)
+        "As primeiras 3 linhas do DataFrame resultante são:\n"
+        + result_df.head(3).to_markdown(index=False)
     )
 
 
 @tool
-def save_processed_data(df, output_path: str):
+def save_processed_data(output_path: str):
     """
     Salva um DataFrame do Pandas em um arquivo Excel (.xlsx) no caminho especificado.
     Esta ferramenta é útil para persistir resultados de análises.
@@ -90,8 +134,16 @@ def save_processed_data(df, output_path: str):
     Retorna o caminho do arquivo salvo em caso de sucesso, ou uma mensagem de erro.
     """
     print(f"\n[Tool Call] Chamando save_processed_data para o arquivo: {output_path}")
+
+    global _GLOBAL_PROCESSED_DATAFRAME
+    if _GLOBAL_PROCESSED_DATAFRAME is None or _GLOBAL_PROCESSED_DATAFRAME.empty:
+        return "Erro: Nenhum DataFrame processado para salvar. Execute 'analyze_and_calculate_all_costs' primeiro."
     path_obj = Path(output_path)
-    return save_dataframe_to_excel(df, path_obj)
+    saved_path = save_dataframe_to_excel(_GLOBAL_PROCESSED_DATAFRAME, path_obj)
+    if saved_path is None:
+        return f"Erro ao salvar o DataFrame em {output_path}."
+
+    return f"DataFrame salvo com sucesso em {saved_path}"
 
 
 def setup_llm():
@@ -103,40 +155,30 @@ def setup_llm():
             "e que load_dotenv() seja chamado no main.py."
         )
     llm = ChatGroq(
-        temperature=0, groq_api_key=groq_api_key, model_name="llama3-70b-8192"
+        temperature=0, groq_api_key=groq_api_key, model_name="llama3-8b-8192"
     )
     return llm
 
 
-def setup_agent():
+def setup_agent(debug=False):
     llm = setup_llm()
     tools = [load_data, analyze_and_calculate_all_costs, save_processed_data]
 
     # Definição do prompt para guiar o agente criado
     prompt = ChatPromptTemplate.from_messages(
         [
-            (
-                "system",
-                "Você é um assistente de análise de dados especializado em custos de colaboradores, "
-                "ferramentas e benefícios. Sua função é responder a perguntas usando as ferramentas disponíveis. "
-                "Sempre comece carregando os dados usando a ferramenta 'load_data' do diretório 'data/input'. "
-                "Depois de carregar, se a pergunta envolver custos totais ou consolidação, use 'analyze_and_calculate_all_costs'. "
-                "Se o usuário pedir para salvar algo, use 'save_processed_data'. "
-                "Seja conciso e direto nas suas respostas. "
-                "Se você não tiver as informações necessárias ou as ferramentas para responder, diga isso claramente."
-                "Ao final da sua análise, se pertinente, mostre as primeiras 5 linhas do DataFrame resultante.",
-            ),
+            ("system", SYSTEM_PROMPT),
             ("user", "{input}"),
-            (
-                "placeholder",
-                "{agent_scratchpad}",
-            ),
+            ("placeholder", "{agent_scratchpad}"),
         ]
     )
 
     agent = create_tool_calling_agent(llm, tools, prompt)
     agent_executor = AgentExecutor(
-        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
+        agent=agent,
+        tools=tools,
+        verbose=debug,
+        handle_parsing_errors=True,
     )
     return agent_executor
 
@@ -145,8 +187,7 @@ def run_agent_interaction(agent_executor: AgentExecutor, initial_query: str = No
     if initial_query:
         print(f"Executando interação com a query inicial: {initial_query}")
         response = agent_executor.invoke({"input": initial_query})
-        print("Resposta do Agente")
-        print(response["output"])
+        print("Relatorio gerado com sucesso!!!")
     else:
         print("Agente pronto para interagir. Digite 'sair' para encerrar.")
         while True:

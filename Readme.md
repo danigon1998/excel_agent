@@ -51,7 +51,8 @@ A seguir, a ordem de execução das principais tarefas que guiaram o desenvolvim
 5.  Criar funções de carregamento (`load`) e salvamento (`save`) dos arquivos.
 6.  Criar o mapeamento de colunas, tanto geral quanto específico por tipo de arquivo.
 7.  Documentar o que foi feito e o motivo em relação ao mapeamento.
-8.  
+8.  Criar as primeiras "ferramentas" para o agent
+9.  Teste de perguntas e prompts
 
 ## Por que foi escolhido llama3-70b-8192?
 
