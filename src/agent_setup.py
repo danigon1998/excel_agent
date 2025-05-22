@@ -2,7 +2,9 @@ import os
 import pandas as pd
 from pathlib import Path
 
-from langchain_groq import ChatGroq  # ChatGroq para poder usar o modelo Llama3-70b
+from langchain_groq import (
+    ChatGroq,
+)  # ChatGroq para poder usar os diversos modelos que sejam considerados necessários
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import tool
 from langchain.agents import AgentExecutor, create_tool_calling_agent

@@ -1,7 +1,6 @@
 from src.agent_setup import (
     setup_agent,
     run_agent_interaction,
-    _GLOBAL_PROCESSED_DATAFRAME,
 )
 
 
