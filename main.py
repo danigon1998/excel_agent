@@ -30,7 +30,9 @@ def run_two_agent_pipeline(
     print("--- Configurando LLMs e Agentes ---")
     load_dotenv()
 
-    llm_for_agent1 = setup_llm_instance(model="llama3-70b-8192", temperature=0.1)
+    llm_for_agent1 = setup_llm_instance(
+        model="deepseek-r1-distill-llama-70b", temperature=0.1
+    )
     llm_for_agent2 = setup_llm_instance()
 
     agent_executor_std = setup_standardization_agent(llm_for_agent1, debug=debug)
