@@ -7,47 +7,55 @@ import re
 def standardize_dataframe(
     df: pd.DataFrame, file_name_stem: str, llm, canonical_names: dict
 ):
-    standardized_df_original = df.copy()  # Copia para revertir en caso de error total
+    standardized_df_original = df.copy()
     original_columns = df.columns.str.strip().tolist()
 
-    # Prompt mejorado para ser más estricto con la salida JSON
     prompt_template = f"""
-    Sua tarefa é mapear colunas de um arquivo Excel para um conjunto de nomes de colunas padrão.
-    O arquivo se chama '{file_name_stem}'.
-    As colunas ORIGINAIS e EXATAS presentes neste arquivo são: {original_columns}. Use estes nomes EXATOS como chaves no JSON.
+    Sua tarefa é extrair informações relevantes de colunas de um arquivo Excel e mapeá-las para um conjunto de NOMES DE COLUNA PADRÃO VÁLIDOS.
+    O arquivo se chama: '{file_name_stem}'.
+    As colunas ORIGINAIS e EXATAS neste arquivo são: {original_columns}. Use estes nomes EXATOS como chaves no JSON de resposta.
 
     Abaixo está a LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS (e suas descrições) para os quais você deve mapear as colunas originais. Use estes nomes EXATOS como valores no JSON:
     {json.dumps(canonical_names, ensure_ascii=False, indent=2)}
 
     Instruções CRÍTICAS para o mapeamento:
-    1. Para CADA coluna da lista de colunas ORIGINAIS (`{original_columns}`), decida qual é o nome de coluna PADRÃO MAIS APROPRIADO da LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS.
-    2. Dê FORTE PREFERÊNCIA a nomes padrão que sejam específicos para o tipo de arquivo (ex: se o nome do arquivo contém 'Unimed', prefira nomes padrão que contenham 'Unimed' sobre nomes genéricos, se aplicável e fizer sentido).
-    3. Se uma coluna ORIGINAL NÃO TIVER um mapeamento claro, óbvio e apropriado para QUALQUER nome da LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS, você DEVE OMITIR essa coluna original do dicionário JSON de resposta. NÃO invente mapeamentos.
+    1.  Primeiro, identifique a natureza geral do arquivo (Salário, Benefício, Ferramenta, etc.) a partir do nome do arquivo ('{file_name_stem}') e das colunas originais.
 
-    Formato OBRIGATÓRIO da Resposta:
+    2.  MAPEAMENTO PADRÃO PARA A MAIORIA DOS ARQUIVOS DE BENEFÍCIOS E FERRAMENTAS:
+        a.  Para colunas que descrevem o nome específico do plano, serviço ou licença (ex: 'Plano Dental Prata', 'Licença Photoshop CC', 'AWS EC2 Instance m5.large'), mapeie para "Nome do Item". Use também o nome do arquivo '{file_name_stem}' para ajudar a formar um 'Nome do Item' descritivo (ex: "Unimed - Plano Prata", "AWS - EC2 Instance m5.large").
+        b.  Para colunas que indicam o tipo geral do benefício ou ferramenta (ex: 'Plano de Saúde', 'Software', 'Serviço Cloud'), mapeie para "Tipo do Item". Se não houver coluna de tipo, tente inferir um tipo geral a partir do 'Nome do Item' ou do nome do arquivo.
+        c.  Para colunas de data de início ou ativação, mapeie para "Data de Ativacao do Item".
+        d.  Para colunas que representam o CUSTO MENSAL principal ou TOTAL do item descrito, mapeie para "Custo Mensal do Item".
+
+    3.  CASOS ESPECIAIS (use com moderação, somente se aplicável):
+        * Se o arquivo for claramente sobre 'Github' e contiver colunas distintas para custos de 'Copilot' e 'Licença Base', use os nomes padrão específicos "Custo Copilot Github" e "Custo Licenca Base Github".
+
+    4.  DADOS DO COLABORADOR: Para colunas de identificação (CPF, Nome), departamento e salário base, use "CPF Colaborador", "Nome Colaborador", "Centro de Custo", "Salario".
+
+    5.  OMISSÃO: Se uma coluna ORIGINAL não se encaixar claramente em NENHUM dos nomes padrão válidos conforme as instruções acima, OMITE-A do dicionário JSON. Não invente mapeamentos.
+
+    Formato OBRIGATÓRIO da Resposta: [Sin cambios, sigue siendo solo JSON]
     Responda ÚNICA E EXCLUSIVAMENTE com um objeto JSON.
     As CHAVES do dicionário JSON DEVEM SER NOMES EXATOS da lista de colunas ORIGINAIS fornecida ({original_columns}).
     Os VALORES do dicionário JSON DEVEM SER NOMES EXATOS da LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS.
-    NÃO inclua NENHUMA palavra, introdução, explicação, comentário, ou blocos de markdown como \`\`\`json ou \`\`\`.
+    NÃO inclua NENHUMA palavra, introdução, explicação, comentário, ou blocos de markdown.
     A sua resposta DEVE SER ESTRITAMENTE O DICIONÁRIO JSON, e nada mais.
 
-    Exemplo de ÚNICA SAÍDA VÁLIDA (assumindo que as colunas originais eram ["Nome Completo do Funcionario", "Identificador CPF", "Valor da Ferramenta X", "Coluna Sem Mapeamento Claro"]):
+    Exemplo (arquivo 'Beneficio_Plano_Saude_Empresa.xlsx', colunas originais ['Matrícula', 'Nome Completo', 'Plano Contratado', 'Valor Mensalidade', 'Obs']):
     {{
-        "Nome Completo do Funcionario": "Nome Colaborador",
-        "Identificador CPF": "CPF Colaborador",
-        "Valor da Ferramenta X": "Custo Mensal Github"
+        "Nome Completo": "Nome Colaborador",
+        "Plano Contratado": "Nome do Item", // LLM inferiria valor como "Plano Saúde Empresa - [valor da coluna Plano Contratado]"
+        "Valor Mensalidade": "Custo Mensal do Item"
     }}
-    (Neste exemplo, "Coluna Sem Mapeamento Claro" foi OMITIDA porque não tinha um bom mapeamento para um nome padrão VÁLIDO).
+    (Neste exemplo, 'Matrícula' e 'Obs' foram omitidas. 'Tipo do Item' poderia ser inferido como 'Plano de Saúde').
     """
 
     print(
         f"\n[Standardize] Solicitando mapeo de columnas al LLM para: {file_name_stem}"
     )
-    response = llm.invoke(
-        prompt_template
-    )  # Asumiendo que llm.invoke funciona como antes
+    response = llm.invoke(prompt_template)
 
-    mapping_dict = None  # Inicializar como None
+    mapping_dict = None
     llm_output_content = (
         response.content if hasattr(response, "content") else str(response)
     )
