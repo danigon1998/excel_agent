@@ -1,55 +1,17 @@
 import pandas as pd
 from src import data_globals
+from src.prompts import get_display_name_from_df_key_prompt
 
 
 def _get_display_name_from_llm(df_key: str, llm_instance):
     """
     Usa o LLM para gerar um nome de exibição limpo a partir de uma chave de DataFrame (nome do arquivo).
     """
-    prompt_llm = f"""
-    Analisando a seguinte chave de DataFrame, que geralmente é derivada de um nome de arquivo Excel: '{df_key}'
-
-    Sua tarefa é extrair ou gerar um nome de exibição curto, limpo e representativo para o tipo de custo principal que este arquivo provavelmente contém.
-    Este nome será usado para nomear uma coluna de custo em um relatório final (ex: "Custo Mensal [Nome Gerado]").
-
-    Exemplos de como você deve pensar:
-    - Se a chave for 'Beneficio 1 - Unimed Seguros', um bom nome de exibição seria 'Unimed Seguros' ou 'Unimed'.
-    - Se a chave for 'Ferramenta XPTO - AWS Cloud Services', um bom nome seria 'AWS Cloud Services' ou 'AWS'.
-    - Se a chave for 'Planilha Custos Gympass Nov23', um bom nome seria 'Gympass'.
-    - Se a chave for 'Ferramenta 2 - Google_Workspace_Detalhes', um bom nome seria 'Google Workspace'.
-    - Se a chave for 'BENEFICIO_NOVO_SEGURO_VIAGEM_INTERNACIONAL', um bom nome seria 'Seguro Viagem Internacional'.
-
-    Responda APENAS com o nome de exibição limpo.
-    Se a chave não parecer representar um tipo de custo específico (ex: 'Backup Temporario', 'Notas Internas'), responda com 'N/A'.
-    Não inclua nenhuma outra palavra, introdução ou explicação.
-
-    Nome de exibição para '{df_key}':
-    """
+    prompt_llm = get_display_name_from_df_key_prompt(df_key)
     try:
         response = llm_instance.invoke(prompt_llm)
         clean_name = response.content if hasattr(response, "content") else str(response)
         clean_name = clean_name.strip().title()
-
-        if clean_name.upper() == "N/A" or not clean_name or len(clean_name) > 50:
-            print(f"LLM indicou N/A ou nome inválido para '{df_key}'. Usando fallback.")
-            # Fallback si el LLM no da una respuesta útil
-            name = df_key.replace("_", " ").replace("-", " ").title()
-            prefixes_to_remove = [
-                "Beneficio 1 ",
-                "Beneficio 2 ",
-                "Beneficio 3 ",
-                "Ferramenta 1 ",
-                "Ferramenta 2 ",
-                "Ferramenta 3 ",
-                "Dados ",
-                "Planilha ",
-            ]
-            name_lower = name.lower()
-            for prefix in prefixes_to_remove:
-                if name_lower.startswith(prefix.lower()):
-                    name = name[len(prefix) :].strip().title()
-                    break
-            return name if name else None
 
         print(f"LLM gerou display name '{clean_name}' para df_key '{df_key}'.")
         return clean_name
@@ -57,23 +19,7 @@ def _get_display_name_from_llm(df_key: str, llm_instance):
         print(
             f"Erro ao chamar LLM para gerar display name para '{df_key}': {e}. Usando fallback."
         )
-        name = df_key.replace("_", " ").replace("-", " ").title()
-        prefixes_to_remove = [
-            "Beneficio 1 ",
-            "Beneficio 2 ",
-            "Beneficio 3 ",
-            "Ferramenta 1 ",
-            "Ferramenta 2 ",
-            "Ferramenta 3 ",
-            "Dados ",
-            "Planilha ",
-        ]
-        name_lower = name.lower()
-        for prefix in prefixes_to_remove:
-            if name_lower.startswith(prefix.lower()):
-                name = name[len(prefix) :].strip().title()
-                break
-        return name if name else None
+        return
 
 
 def merge_cost_data(

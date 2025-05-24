@@ -8,17 +8,7 @@ from src.data_handler import (
     save_dataframe_to_excel,
 )
 from src.data_processor import perform_full_cost_analysis
-
-
-SYSTEM_PROMPT_AGENT_2 = (
-    SYSTEM_PROMPT_AGENT_2
-) = """
-Você é um agente de análise de custos que opera sobre dados organizacionais JÁ CARREGADOS E PADRONIZADOS (pelo Agente 1).
-Sua principal função é realizar cálculos de custos por colaborador e gerar relatórios.
-Use a ferramenta 'analyze_all_costs_tool' para realizar a análise e os cálculos.
-Depois, se solicitado, use 'save_processed_data_tool' para salvar o relatório.
-Sempre explique seu raciocínio antes de agir.
-"""
+from src.prompts import SYSTEM_PROMPT_AGENT_2
 
 
 @tool

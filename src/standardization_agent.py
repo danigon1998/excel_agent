@@ -8,16 +8,7 @@ import pandas as pd
 
 from src import data_globals
 from src.data_handler import standardize_dataframe
-
-SYSTEM_PROMPT_AGENT_1 = """
-Você é um agente especializado em padronização de dados de planilhas Excel.
-Sua tarefa é receber um diretório, carregar todas as planilhas Excel (.xlsx) nele contidas,
-e usar suas capacidades de IA para padronizar os nomes das colunas de cada planilha
-com base em um conjunto pré-definido de nomes canônicos e suas descrições.
-Após a padronização, os dados devem ser disponibilizados para um segundo agente de análise.
-Use a ferramenta 'standardize_spreadsheets_tool' para realizar esta tarefa.
-Explique brevemente seu plano antes de chamar a ferramenta.
-"""
+from src.prompts import SYSTEM_PROMPT_AGENT_1
 
 
 def _load_and_standardize_excel_files_core(

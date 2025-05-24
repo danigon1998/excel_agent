@@ -10,13 +10,15 @@ from src.cost_analysis_agent import setup_cost_analysis_agent
 
 
 def setup_llm_instance(
+    temperature=0.0,
     model="llama3-8b-8192",
-):  # Tu función setup_llm renombrada o una nueva
-    """Configura y devuelve una instancia del LLM."""
+):
     groq_api_key = os.getenv("GROQ_API_KEY")
     if not groq_api_key:
         raise ValueError("GROQ_API_KEY não definida.")
-    return ChatGroq(temperature=0, groq_api_key=groq_api_key, model_name=model)
+    return ChatGroq(
+        temperature=temperature, groq_api_key=groq_api_key, model_name=model
+    )
 
 
 def run_two_agent_pipeline(
@@ -28,7 +30,7 @@ def run_two_agent_pipeline(
     print("--- Configurando LLMs e Agentes ---")
     load_dotenv()
 
-    llm_for_agent1 = setup_llm_instance(model="llama3-70b-8192")
+    llm_for_agent1 = setup_llm_instance(model="llama3-70b-8192", temperature=0.1)
     llm_for_agent2 = setup_llm_instance()
 
     agent_executor_std = setup_standardization_agent(llm_for_agent1, debug=debug)
@@ -55,11 +57,8 @@ def run_two_agent_pipeline(
 
 
 if __name__ == "__main__":
-    # Ejemplo de cómo ejecutarlo
     user_full_query = "Pegue os dados da pasta 'data/input', calcule o custo de cada colaborador e me dê um relatório final em 'data/output/relatorio_final_agentes.xlsx'."
 
-    # Deberías extraer input_dir y output_file de la query o pasarlos como argumentos al script.
-    # Por simplicidad, los hardcodeamos aquí basados en la query de ejemplo.
     INPUT_DATA_DIR = "data/input"
     OUTPUT_REPORT_FILE = "data/output/relatorio_final_agentes.xlsx"
 
