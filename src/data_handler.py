@@ -1,157 +1,183 @@
-import pandas as pd
 from pathlib import Path
+import pandas as pd
+import json
+import re
+from src.prompts import get_standardize_dataframe_prompt
 
 
-COLUNA_MAPEIO_GERAL = {
-    # Identificadores principais
-    "CPF": "CPF Colaborador",
-    "Documento": "CPF Colaborador",
-    "Nome": "Nome Colaborador",
-    "Assinante": "Nome Colaborador",
-    "Beneficiário": "Nome Colaborador",
-    # Outros dados generais
-    "Departamento": "Centro de Custo",
-    "Salario": "Salario",
-    "Data Ativacao": "Data Ativacao",
-    "Valor Mensal": "Custo Mensal",
-    "Valor": "Custo",
-    "Plano": "Tipo de Plano",
-    "Licença": "Tipo de Licenca",
-    "Total": "Custo Total Geral",
-    # Campos de beneficios
-    "Idade": "Idade",
-    "Dependência": "Dependencia",
-    "Data Limite": "Data Limite",
-    "Data Inclusão": "Data Inclusao",
-    "Data Exclusão": "Data Exclusao",
-    "Rubrica": "Rubrica",
-    "Outros": "Outros Custos",
-    "Parcela": "Parcela",
-    "Valor Parcela": "Valor Parcela",
-    "Coparticipacao": "Coparticipacao",
-    "Valor Desconto": "Valor Desconto",
-}
+def _extract_json_from_llm_output(llm_output_content: str, file_name_stem: str):
+    """
+    Extrai e parseia o JSON da string de resposta bruta do LLM.
+    Inclui limpeza de comentários e vírgulas finais.
+    """
+    mapping_dict = None
+    json_str = ""
+    print(f"[JSON Extractor] Processando resposta para '{file_name_stem}'.")
 
-# Mapeio específico baseado numa palabra chave no nome do arquivo (sem extensão).
-COLUNA_MAPEIO_POR_TIPO = {
-    "colaboradores": {  # Para planilha "Ddos Colaboradores.xlsx"
-        "Nome": "Nome Colaborador",
-        "CPF": "CPF Colaborador",
-        "Departamento": "Centro de Custo",
-        "Salario": "Salario",
-    },
-    "github": {  # Para planilha "Ferramenta 1 - Github.xlsx"
-        "Assinante": "Nome Colaborador",
-        "Documento": "CPF Colaborador",
-        "Data Ativacao": "Data Ativacao Github",
-        "Copilot": "Custo Copilot Github",
-        "Licença": "Custo Licenca Github",
-        "Valor Mensal": "Custo Mensal Github",
-    },
-    "google workspace": {  # Para planilha "Ferramenta 2 - Google workspace.xlsx"
-        "Assinante": "Nome Colaborador",
-        "Documento": "CPF Colaborador",
-        "Data Ativacao": "Data Ativacao Google Workspace",
-        "Valor Mensal": "Custo Mensal Google Workspace",
-    },
-    "unimed": {  # Para planilha "Beneficio 1 - Unimed.xlsx"
-        "Código": "Codigo Beneficio Unimed",
-        "Beneficiário": "Nome Colaborador",
-        "CPF": "CPF Colaborador",
-        "Tipo": "Tipo Beneficio Unimed",
-        "Idade": "Idade Beneficiario Unimed",
-        "Dependência": "Dependencia Beneficiario Unimed",
-        "Data Limite": "Data Limite Beneficio Unimed",
-        "Data Inclusão": "Data Inclusao Beneficio Unimed",
-        "Data Exclusão": "Data Exclusao Beneficio Unimed",
-        "Rubrica": "Rubrica Beneficio Unimed",
-        "Outros": "Outros Custos Beneficio Unimed",
-        "Total": "Custo Mensal Unimed",
-    },
-    "gympass": {  # Para planilha "Beneficio 2 - Gympass.xlsx"
-        "Assinante": "Nome Colaborador",
-        "Documento": "CPF Colaborador",
-        "Data Ativacao": "Data Ativacao Gympass",
-        "Plano": "Plano Gympass",
-        "Parcela": "Parcela Gympass",
-        "Valor Parcela": "Valor Parcela Gympass",
-        "Coparticipacao": "Coparticipacao Gympass",
-        "Valor Desconto": "Valor Desconto Gympass",
-        "Valor Mensal": "Custo Mensal Gympass",
-    },
-}
+    match_markdown = re.search(
+        r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", llm_output_content
+    )
+    if match_markdown:
+        json_str = match_markdown.group(1)
+    else:
+        match_direct = re.search(r"(\{[\s\S]*\})", llm_output_content)
+        if match_direct:
+            json_str = match_direct.group(1)
+        else:
+            json_str = llm_output_content.strip()
 
+    if json_str:
+        json_str_cleaned = re.sub(r"//.*", "", json_str)
+        json_str_cleaned = re.sub(r",\s*([\}\]])", r"\1", json_str_cleaned.strip())
 
-def standardize_dataframe(df: pd.DataFrame, file_name_stem: str):
-
-    standardized_df = df.copy()
-
-    standardized_df.columns = standardized_df.columns.str.strip()
-
-    applied_specific_map = False
-    for keyword, mapping in COLUNA_MAPEIO_POR_TIPO.items():
-        if keyword in file_name_stem.lower():
-            rename_dict = {col_orig: col_std for col_orig, col_std in mapping.items()}
-            if rename_dict:
-                standardized_df = standardized_df.rename(columns=rename_dict)
-                print(
-                    f"Aplicado mapeio específico para '{keyword}' ({', '.join(rename_dict.keys())}) ao arquivo '{file_name_stem}'."
-                )
-            applied_specific_map = True
-            break
-
-    if not applied_specific_map:
-        rename_dict = {
-            col_orig: col_std for col_orig, col_std in COLUNA_MAPEIO_GERAL.items()
-        }
-        if rename_dict:
-            standardized_df = standardized_df.rename(columns=rename_dict)
+        try:
+            mapping_dict = json.loads(json_str_cleaned)
+        except json.JSONDecodeError as e:
             print(
-                f"Aplicado mapeio geral ({', '.join(rename_dict.keys())}) ao arquivo '{file_name_stem}'."
+                f"ERRO [JSON Extractor]: Erro ao decodificar JSON para '{file_name_stem}': {e}. String (limpa): '{json_str_cleaned}'"
             )
+            mapping_dict = None
+    else:
+        print(
+            f"ADVERTÊNCIA [JSON Extractor]: Não foi possível extrair uma string JSON da resposta do LLM para '{file_name_stem}'."
+        )
 
-    cols_to_strip_data = ["CPF Colaborador", "Nome Colaborador"]
-    for col in cols_to_strip_data:
-        if col in standardized_df.columns and standardized_df[col].dtype == "object":
+    return mapping_dict
+
+
+def _build_valid_rename_map(
+    mapping_dict: dict, original_df_columns: list, canonical_names_keys: set
+):
+    """
+    Constrói um mapa de renomeação válido a partir do dicionário do LLM,
+    filtrando por colunas originais existentes e nomes canônicos válidos.
+    """
+    if not isinstance(mapping_dict, dict):
+        print("ADVERTÊNCIA [Map Validator]: mapping_dict não é um dicionário.")
+        return {}
+
+    valid_map = {
+        original_col: standard_col
+        for original_col, standard_col in mapping_dict.items()
+        if original_col in original_df_columns
+        and isinstance(standard_col, str)
+        and standard_col
+        and standard_col in canonical_names_keys
+    }
+    return valid_map
+
+
+def _apply_mapping_and_select_final_columns(
+    original_df: pd.DataFrame, valid_rename_map: dict
+):
+    """
+    Aplica o valid_rename_map ao DataFrame original, e então seleciona
+    um conjunto único e ordenado de colunas canônicas.
+    Retorna o DataFrame processado ou None se a seleção final de colunas falhar.
+    """
+    if not valid_rename_map:
+        print("[Column Selector] Mapa de renomeação válido está vazio.")
+        return None
+
+    df_renamed = original_df.rename(columns=valid_rename_map)
+
+    unique_target_columns_in_order = list(
+        dict.fromkeys(
+            std_col
+            for std_col in valid_rename_map.values()
+            if std_col in df_renamed.columns
+        )
+    )
+
+    if unique_target_columns_in_order:
+        processed_df = df_renamed[unique_target_columns_in_order]
+        return processed_df
+    else:
+        return None
+
+
+def _strip_data_from_selected_columns(df: pd.DataFrame, cols_to_strip: list):
+    """
+    Aplica strip em colunas de string especificadas do DataFrame.
+    """
+    df_stripped = df.copy()
+    for col in cols_to_strip:
+        if col in df_stripped.columns and df_stripped[col].dtype == "object":
             try:
-                standardized_df[col] = standardized_df[col].astype(str).str.strip()
+                df_stripped[col] = df_stripped[col].astype(str).str.strip()
             except Exception as e:
                 print(
-                    f"Advertencia: Não se aplicou strip() na coluna '{col}'. Error: {e}"
+                    f"ADVERTÊNCIA [Data Stripper]: Não se aplicou strip() na coluna '{col}'. Error: {e}"
                 )
+    return df_stripped
 
-    return standardized_df
 
+def standardize_dataframe(
+    df: pd.DataFrame,
+    file_name_stem: str,
+    llm,
+    canonical_names: dict,
+):
+    standardized_df_original = df.copy()
+    original_columns = df.columns.str.strip().tolist()
 
-def load_excel_files(input_dir: Path):
+    # 1. Obter o Prompt
+    prompt_text = get_standardize_dataframe_prompt(
+        file_name_stem, original_columns, canonical_names
+    )
+    print(
+        f"\n[Standardize] Solicitando mapeio das colunas ao LLM para: {file_name_stem}"
+    )
 
-    if not input_dir.is_dir():
-        print(f"Erro: O endereço não existe ou não é do tipo Path: {input_dir}")
-        return {}
+    # 2. Invocar o LLM
+    response = llm.invoke(prompt_text)
+    llm_output_content = (
+        response.content if hasattr(response, "content") else str(response)
+    )
+    print(
+        f"[Standardize] Resposta bruta do LLM para '{file_name_stem}':\n{llm_output_content}\n--------------------"
+    )
 
-    excel_files = list(input_dir.glob("**/*.xlsx"))
+    # 3. Extrair e Parsear JSON da resposta do LLM
+    mapping_dict = _extract_json_from_llm_output(llm_output_content, file_name_stem)
 
-    if not excel_files:
-        print(f"Erro: Nenhum arquivo Excel encontrado em {input_dir}")
-        return {}
+    final_df = standardized_df_original
 
-    dataframes_dict = {}
-    for file_path in excel_files:
-        file_name_stem = file_path.stem
-        print(f"Carregando arquivo: {file_name_stem}")
-        try:
-            df = pd.read_excel(file_path)
-            if df.empty:
-                print(f"Arquivo {file_name_stem} está vazio.")
-                continue
-            df_standardized = standardize_dataframe(df, file_name_stem)
-            print(f"Colunas processadas para estandarização")
-            dataframes_dict[file_name_stem] = df_standardized
-            print(f"Arquivo {file_name_stem} carregado com sucesso.")
-        except Exception as exc:
-            print(f"Erro ao carregar o arquivo {file_name_stem}: {exc}")
+    if mapping_dict:
+        # 4. Construir Mapa de Renomeação Válido
+        valid_rename_map = _build_valid_rename_map(
+            mapping_dict, original_columns, set(canonical_names.keys())
+        )
 
-    return dataframes_dict
+        if valid_rename_map:
+            # 5. Aplicar Mapeamento e Selecionar Colunas Finais
+            processed_df = _apply_mapping_and_select_final_columns(
+                standardized_df_original, valid_rename_map
+            )
+
+            if processed_df is not None and not processed_df.empty:
+                final_df = processed_df
+                print(
+                    f"Colunas em '{file_name_stem}' depois da estandarização e seleção: {final_df.columns.tolist()}"
+                )
+            else:
+                print(
+                    f"ADVERTÊNCIA [Standardize]: Processamento do mapeio (rename/select) não produziu um DataFrame válido para '{file_name_stem}'. Usando DataFrame original (pode ter sido renomeado parcialmente se _apply_mapping falhou internamente mas devolveu original). Idealmente, revertemos ao 100% original."
+                )
+                final_df = standardized_df_original
+        else:
+            print(
+                f"ADVERTÊNCIA [Standardize]: Não foi possível construir um mapa de renomeio válido para '{file_name_stem}' a partir da resposta do LLM. Usando DataFrame original."
+            )
+    else:
+        print(
+            f"ADVERTÊNCIA [Standardize]: Não foi recebido nenhum mapeio válido do LLM para '{file_name_stem}' (JSON malformado ou extração falhou). Usando DataFrame original."
+        )
+
+    cols_to_strip = ["CPF Colaborador", "Nome Colaborador"]
+    final_df = _strip_data_from_selected_columns(final_df, cols_to_strip)
+
+    return final_df
 
 
 def save_dataframe_to_excel(

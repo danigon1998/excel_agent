@@ -1,97 +1,141 @@
 import pandas as pd
+from src import data_globals
+from src.prompts import get_display_name_from_df_key_prompt
 
 
-def merge_cost_data(main_df: pd.DataFrame, cost_df: pd.DataFrame, cost_type_name: str):
+def _get_display_name_from_llm(df_key: str, llm_instance):
+    """
+    Usa o LLM para gerar um nome de exibição limpo a partir de uma chave de DataFrame (nome do arquivo).
+    """
+    prompt_llm = get_display_name_from_df_key_prompt(df_key)
+    try:
+        response = llm_instance.invoke(prompt_llm)
+        clean_name = response.content if hasattr(response, "content") else str(response)
+        clean_name = clean_name.strip().title()
+
+        print(f"LLM gerou display name '{clean_name}' para df_key '{df_key}'.")
+        return clean_name
+    except Exception as e:
+        print(
+            f"Erro ao chamar LLM para gerar display name para '{df_key}': {e}. Usando fallback."
+        )
+        return
+
+
+def merge_cost_data(
+    main_df: pd.DataFrame, cost_df: pd.DataFrame, display_name_for_final_column: str
+):
     if main_df.empty:
         print("DataFrame principal está vazio.")
         return main_df
+
+    final_target_cost_column_name = f"Custo Mensal {display_name_for_final_column}"
+
     if cost_df.empty:
-        print(f"DataFrame de custo {cost_type_name} está vazio.")
-        main_df[f"Custo Mensal {cost_type_name}"] = 0
+        print(f"DataFrame de custo {display_name_for_final_column} está vazio.")
+        main_df[f"Custo Mensal {display_name_for_final_column}"] = 0.0
         return main_df
 
     if "CPF Colaborador" not in main_df.columns:
         raise ValueError(
-            "Coluna 'CPF Colaborador' não encontrada no DataFrame principal."
+            "ERRO CRÍTICO: 'CPF Colaborador' não encontrado no DataFrame principal (main_df)."
         )
     if "CPF Colaborador" not in cost_df.columns:
         raise ValueError(
-            f"Coluna 'CPF Colaborador' não encontrada no DataFrame de custo {cost_type_name}."
+            f"ERRO CRÍTICO: 'CPF Colaborador' não encontrado no DataFrame de custo para '{display_name_for_final_column}'."
         )
 
-    cost_column_name = f"Custo Mensal {cost_type_name}"
-    if cost_column_name not in cost_df.columns:
+    source_cost_column = "Custo Mensal do Item"
+    if source_cost_column not in cost_df.columns:
         print(
-            f"Aviso: A coluna de custo esperada '{cost_column_name}' não foi encontrada"
+            f"Aviso: A coluna de custo esperada '{source_cost_column}' não foi encontrada"
         )
-        main_df[cost_column_name] = 0
+        main_df[source_cost_column] = 0
         return main_df
 
-    cols_to_merge = ["CPF Colaborador", cost_column_name]
+    cost_df[source_cost_column] = pd.to_numeric(
+        cost_df[source_cost_column], errors="coerce"
+    ).fillna(0.0)
     cost_df_grouped = (
-        cost_df.groupby("CPF Colaborador")[cost_column_name].sum().reset_index()
+        cost_df.groupby("CPF Colaborador")[source_cost_column].sum().reset_index()
     )
-    cost_df_grouped.rename(columns={cost_column_name: cost_column_name}, inplace=True)
+    cost_df_grouped.rename(
+        columns={source_cost_column: final_target_cost_column_name}, inplace=True
+    )
     merged_df = pd.merge(
         main_df,
         cost_df_grouped,
         on="CPF Colaborador",
         how="left",
-        suffixes=(
-            "",
-            f"_{cost_type_name}_x",
-        ),  # Sufixo vazio para o main_df, sufixo para o cost_df (se houver colisão)
     )
-    merged_df[cost_column_name] = merged_df[cost_column_name].fillna(0)
-    print(f"Merge realizado com sucesso para {cost_type_name}")
+    merged_df[final_target_cost_column_name] = merged_df[
+        final_target_cost_column_name
+    ].fillna(0.0)
+    print(f"Merge realizado com sucesso para {display_name_for_final_column}")
     return merged_df
 
 
 def consolidate_all_cost(dataframes_dict: dict):
     print("Iniciando a consolidação de todos os custos")
 
-    df_colaborares = None
-    for key, df in dataframes_dict.items():
-        if "colaboradores" in key.lower():
-            df_colaborares = df.copy()
-            break
-
-    if df_colaborares is None:
-        print("Erro: DataFrame de colaboradores não encontrado.")
+    if data_globals.LLM_AGENT2 is None:
+        print(
+            "ERRO CRÍTICO: LLM_AGENT2 não está configurado em data_globals. Não é possível gerar nomes de exibição via LLM."
+        )
         return pd.DataFrame()
 
-    cost_types = {
-        "github": "Github",
-        "google workspace": "Google Workspace",
-        "unimed": "Unimed",
-        "gympass": "Gympass",
-    }
+    df_colaboradores = None
+    keys_to_process_as_items = list(dataframes_dict.keys())
 
-    final_consolidated_df = df_colaborares
-    for key_in_dict, display_name in cost_types.items():
-        actual_df_key = None
-        for loaded_key in dataframes_dict.keys():
-            if key_in_dict in loaded_key.lower():
-                actual_df_key = loaded_key
-                print(actual_df_key)
-                break
+    for key in list(dataframes_dict.keys()):
+        if "colaboradores" in key.lower():
+            df_colaboradores = dataframes_dict[key].copy()
+            print(f"DataFrame de colaboradores principal identificado: '{key}'")
+            if key in keys_to_process_as_items:
+                keys_to_process_as_items.remove(key)
+            break
 
-        if actual_df_key and dataframes_dict.get(actual_df_key) is not None:
+    if df_colaboradores is None:
+        print("ERRO CRÍTICO: DataFrame de colaboradores não encontrado.")
+        return pd.DataFrame()
+    if "CPF Colaborador" not in df_colaboradores.columns:
+        print(
+            "ERRO CRÍTICO: 'CPF Colaborador' não encontrado no DataFrame de colaboradores."
+        )
+        return pd.DataFrame()
+
+    final_consolidated_df = df_colaboradores.copy()
+
+    for df_key in keys_to_process_as_items:
+        df_item_source = dataframes_dict[df_key]
+
+        if df_item_source is None or df_item_source.empty:
+            continue
+
+        required_cols = ["CPF Colaborador", "Custo Mensal do Item"]
+        if not all(col in df_item_source.columns for col in required_cols):
             print(
-                f"Consolidando dados de: {display_name} (chave original: {actual_df_key})"
+                f"AVISO (consolidate_llm): DataFrame '{df_key}' não possui '{', '.join(required_cols)}'. Ignorando."
             )
-            df_cost_source = dataframes_dict[actual_df_key]
-            final_consolidated_df = merge_cost_data(
-                final_consolidated_df, df_cost_source, display_name
-            )
-        else:
-            print(
-                f"Aviso: DataFrame para '{display_name}' não encontrado no dicionario"
-            )
-            if f"Custo Mensal {display_name}" not in final_consolidated_df.columns:
-                final_consolidated_df[f"Custo Mensal {display_name}"] = 0.0
+            continue
 
-    print("Consolidação de todos os custos concluída")
+        display_name = _get_display_name_from_llm(df_key, data_globals.LLM_AGENT2)
+
+        if not display_name:
+            print(
+                f"AVISO (consolidate_llm): Não foi possível gerar um nome de exibição via LLM para '{df_key}'. Ignorando este DataFrame."
+            )
+            continue
+
+        print(
+            f"Consolidando dados para '{display_name}' (derivado de '{df_key}' via LLM)"
+        )
+
+        final_consolidated_df = merge_cost_data(
+            final_consolidated_df, df_item_source, display_name
+        )
+
+    print("Consolidação de custos (display names via LLM) concluída.")
     return final_consolidated_df
 
 
