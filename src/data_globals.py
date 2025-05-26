@@ -1,5 +1,3 @@
-import pandas as pd
-
 _GLOBAL_LOADED_DATAFRAMES = {}
 _GLOBAL_PROCESSED_DATAFRAME = None
 

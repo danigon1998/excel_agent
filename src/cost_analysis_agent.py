@@ -12,7 +12,7 @@ from src.prompts import SYSTEM_PROMPT_AGENT_2
 
 
 @tool
-def analyze_all_costs_tool() -> str:
+def analyze_all_costs_tool():
     """
     Realiza a análise completa de custos com base nos DataFrames padronizados
     que foram carregados e processados globalmente.
@@ -41,7 +41,7 @@ def analyze_all_costs_tool() -> str:
 
 
 @tool
-def save_processed_data_tool(output_path: str) -> str:
+def save_processed_data_tool(output_path: str):
     """
     Salva o DataFrame processado globalmente (resultado da análise de custos)
     em um arquivo Excel (.xlsx) no caminho especificado.

@@ -46,7 +46,7 @@ def _load_and_standardize_excel_files_core(
 
 
 @tool
-def standardize_spreadsheets_tool(input_dir: str) -> str:
+def standardize_spreadsheets_tool(input_dir: str):
     """
     Carrega todos os arquivos Excel de um diretório, padroniza os nomes das colunas
     usando um LLM e armazena os DataFrames resultantes globalmente.

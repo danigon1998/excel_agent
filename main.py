@@ -1,9 +1,7 @@
-# main.py
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 
-# Importa los setups de los agentes y los globales
 from src import data_globals
 from src.standardization_agent import setup_standardization_agent
 from src.cost_analysis_agent import setup_cost_analysis_agent
@@ -21,9 +19,7 @@ def setup_llm_instance(
     )
 
 
-def run_two_agent_pipeline(
-    initial_query: str, input_dir: str, output_file: str, debug: bool = True
-):
+def run_two_agent_pipeline(input_dir: str, output_file: str, debug: bool = True):
     """
     Executa o pipeline de dois agentes: Estandarização e Análise de Custos.
     """
@@ -31,7 +27,7 @@ def run_two_agent_pipeline(
     load_dotenv()
 
     llm_for_agent1 = setup_llm_instance(
-        model="deepseek-r1-distill-llama-70b", temperature=0.1
+        model="llama-3.3-70b-versatile", temperature=0.1
     )
     llm_for_agent2 = setup_llm_instance()
 
@@ -59,11 +55,8 @@ def run_two_agent_pipeline(
 
 
 if __name__ == "__main__":
-    user_full_query = "Pegue os dados da pasta 'data/input', calcule o custo de cada colaborador e me dê um relatório final em 'data/output/relatorio_final_agentes.xlsx'."
 
     INPUT_DATA_DIR = "data/input"
     OUTPUT_REPORT_FILE = "data/output/relatorio_final_agentes.xlsx"
 
-    run_two_agent_pipeline(
-        user_full_query, INPUT_DATA_DIR, OUTPUT_REPORT_FILE, debug=True
-    )
+    run_two_agent_pipeline(INPUT_DATA_DIR, OUTPUT_REPORT_FILE, debug=True)

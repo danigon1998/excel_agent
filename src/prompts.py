@@ -61,7 +61,7 @@ A sua resposta DEVE SER ESTRITAMENTE O DICIONÁRIO JSON, e nada mais.
 Exemplo (arquivo 'Beneficio_Plano_Saude_Empresa.xlsx', colunas originais ['Matrícula', 'Nome Completo', 'Plano Contratado', 'Valor Mensalidade', 'Obs']):
 {{
     "Nome Completo": "Nome Colaborador",
-    "Plano Contratado": "Nome do Item", // LLM inferiria valor como "Plano Saúde Empresa - [valor da coluna Plano Contratado]"
+    "Plano Contratado": "Nome do Item","
     "Valor Mensalidade": "Custo Mensal do Item"
 }}
 (Neste exemplo, 'Matrícula' e 'Obs' foram omitidas. 'Tipo do Item' poderia ser inferido como 'Plano de Saúde').
@@ -69,10 +69,6 @@ Exemplo (arquivo 'Beneficio_Plano_Saude_Empresa.xlsx', colunas originais ['Matr�
 
 
 def get_display_name_from_df_key_prompt(df_key: str):
-    """
-    Genera el prompt para que el LLM extraiga un nombre de visualización limpio
-    a partir de una clave de DataFrame (nombre de archivo).
-    """
     return f"""
 Analisando a seguinte chave de DataFrame, que geralmente é derivada de um nome de arquivo Excel: '{df_key}'
 
