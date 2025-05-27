@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 
 from src import data_globals
-from src.standardization_agent import setup_standardization_agent
+from src.data_ingestion import load_and_standardize_data_phase
 from src.cost_analysis_agent import setup_cost_analysis_agent
 
 
@@ -19,39 +19,52 @@ def setup_llm_instance(
     )
 
 
-def run_two_agent_pipeline(input_dir: str, output_file: str, debug: bool = True):
+def run_processing_pipeline(input_dir: str, output_file: str, debug: bool = True):
     """
     Executa o pipeline de dois agentes: Estandarização e Análise de Custos.
     """
     print("--- Configurando LLMs e Agentes ---")
     load_dotenv()
 
-    llm_for_agent1 = setup_llm_instance(
+    llm_for_mapping = setup_llm_instance(
         model="llama-3.3-70b-versatile", temperature=0.1
     )
-    llm_for_agent2 = setup_llm_instance()
+    llm_for_analysis_agent = setup_llm_instance()
 
-    agent_executor_std = setup_standardization_agent(llm_for_agent1, debug=debug)
-    agent_executor_analysis = setup_cost_analysis_agent(llm_for_agent2, debug=debug)
+    data_globals.LLM_AGENT2 = llm_for_analysis_agent
 
-    print(f"\n--- Etapa 1: Agente de Estandarização ---")
-    std_agent_input = (
-        f"Carregue e padronize todas as planilhas do diretório '{input_dir}'."
+    loaded_and_standardized_data = load_and_standardize_data_phase(
+        input_dir, llm_for_mapping, data_globals.CANONICAL_COLUMN_NAMES
     )
-    std_response = agent_executor_std.invoke({"input": std_agent_input})
-    print(f"\nResposta do Agente de Estandarização: {std_response['output']}")
+    if not loaded_and_standardized_data:
+        print("\nFalha na etapa de carregamento e padronização de dados. Abortando.")
+        return
+
+    data_globals._GLOBAL_LOADED_DATAFRAMES = loaded_and_standardized_data
 
     if not data_globals._GLOBAL_LOADED_DATAFRAMES:
         print("\nFalha na etapa de estandarização. Abortando.")
         return
 
+    summary_keys = list(loaded_and_standardized_data.keys())
+    print(
+        f"INFO [Pipeline]: {len(loaded_and_standardized_data)} DataFrames carregados e padronizados: {summary_keys}"
+    )
+    print("Os dados estão prontos para análise pelo Agente de Análise de Custos.")
+
     print(f"\n--- Etapa 2: Agente de Análise de Custos ---")
+    cost_analysis_agent_executor = setup_cost_analysis_agent(
+        llm_for_analysis_agent, debug=debug
+    )
+
     analysis_agent_input = f"Realize a análise de custos completa com os dados preparados e salve o relatório em '{output_file}'."
 
-    analysis_response = agent_executor_analysis.invoke({"input": analysis_agent_input})
+    analysis_response = cost_analysis_agent_executor.invoke(
+        {"input": analysis_agent_input}
+    )
     print(f"\nResposta do Agente de Análise de Custos: {analysis_response['output']}")
 
-    print("\n--- Pipeline de Dois Agentes Concluído ---")
+    print("\n--- Pipeline Concluído ---")
 
 
 if __name__ == "__main__":
@@ -59,4 +72,4 @@ if __name__ == "__main__":
     INPUT_DATA_DIR = "data/input"
     OUTPUT_REPORT_FILE = "data/output/relatorio_final_agentes.xlsx"
 
-    run_two_agent_pipeline(INPUT_DATA_DIR, OUTPUT_REPORT_FILE, debug=True)
+    run_processing_pipeline(INPUT_DATA_DIR, OUTPUT_REPORT_FILE, debug=True)
