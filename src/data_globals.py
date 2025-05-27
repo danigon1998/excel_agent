@@ -1,5 +1,8 @@
+import pandas as pd
+
 _GLOBAL_LOADED_DATAFRAMES = {}
-_GLOBAL_PROCESSED_DATAFRAME = None
+_CONSOLIDATED_DF_PRE_TOTALS = pd.DataFrame()
+_GLOBAL_PROCESSED_DATAFRAME = pd.DataFrame()
 
 CANONICAL_COLUMN_NAMES = {
     # --- IDENTIFICADORES UNIVERSAIS DE COLABORADOR ---
@@ -28,5 +31,4 @@ CANONICAL_COLUMN_NAMES = {
     "Custo Licenca Base Github": "Custo da licença base de usuário para Github (excluindo Copilot). Considerado um sub-item de 'Github'. Deve ser numérico.",
 }
 
-LLM_AGENT1 = None
 LLM_AGENT2 = None

@@ -1,10 +1,11 @@
 import os
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
-
+from pathlib import Path
 from src import data_globals
 from src.data_ingestion import load_and_standardize_data_phase
 from src.cost_analysis_agent import setup_cost_analysis_agent
+from src.data_handler import save_dataframe_to_excel
 
 
 def setup_llm_instance(
@@ -63,6 +64,21 @@ def run_processing_pipeline(input_dir: str, output_file: str, debug: bool = True
         {"input": analysis_agent_input}
     )
     print(f"\nResposta do Agente de Análise de Custos: {analysis_response['output']}")
+    if (
+        data_globals._GLOBAL_PROCESSED_DATAFRAME is not None
+        and not data_globals._GLOBAL_PROCESSED_DATAFRAME.empty
+    ):
+        print(f"\n--- Etapa 3: Salvando Relatório Final em '{output_file}' ---")
+
+        saved_path = save_dataframe_to_excel(
+            data_globals._GLOBAL_PROCESSED_DATAFRAME, Path(output_file)
+        )
+        if saved_path:
+            print(f"Relatório final salvo com sucesso em: {saved_path}")
+        else:
+            print(f"Falha ao salvar o relatório final em: {output_file}")
+    else:
+        print("AVISO [Pipeline]: Nenhum DataFrame processado encontrado para salvar.")
 
     print("\n--- Pipeline Concluído ---")
 
