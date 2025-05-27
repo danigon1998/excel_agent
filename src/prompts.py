@@ -68,21 +68,18 @@ Mapeamento JSON para '{file_name_stem}':
 
 def get_display_name_from_df_key_prompt(df_key: str):
     return f"""
-Analisando a seguinte chave de DataFrame, que geralmente é derivada de um nome de arquivo Excel: '{df_key}'
+Extraia o nome principal de '{df_key}' para nomear colunas de custo.
 
-Sua tarefa é extrair ou gerar um nome de exibição curto, limpo e representativo para o tipo de custo principal que este arquivo provavelmente contém.
-Este nome será usado para nomear uma coluna de custo em um relatório final (ex: "Custo Mensal [Nome Gerado]").
+**Instruções:**
+1. Foco em marcas/produtos (ex: Unimed, AWS)
+2. Remova termos genéricos (Planilha, Benefício, Ferramenta, etc.)
+3. Seja conciso - omita datas/versões
 
-Exemplos de como você deve pensar:
-- Se a chave for 'Beneficio 1 - Unimed Seguros', um bom nome de exibição seria 'Unimed Seguros' ou 'Unimed'.
-- Se a chave for 'Ferramenta XPTO - AWS Cloud Services', um bom nome seria 'AWS Cloud Services' ou 'AWS'.
-- Se a chave for 'Planilha Custos Gympass Nov23', um bom nome seria 'Gympass'.
-- Se a chave for 'Ferramenta 2 - Google_Workspace_Detalhes', um bom nome seria 'Google Workspace'.
-- Se a chave for 'BENEFICIO_NOVO_SEGURO_VIAGEM_INTERNACIONAL', um bom nome seria 'Seguro Viagem Internacional'.
+Exemplos:
+- 'Benefício 1 - Unimed Seguros' → 'Unimed'
+- 'Ferramenta AWS Cloud Services' → 'AWS'
+- 'Custos Zoom 2023' → 'Zoom'
 
-Responda APENAS com o nome de exibição limpo.
-Se a chave não parecer representar um tipo de custo específico (ex: 'Backup Temporario', 'Notas Internas'), responda com 'N/A'.
-Não inclua nenhuma outra palavra, introdução ou explicação.
-
-Nome de exibição para '{df_key}':
+Responda APENAS com o nome ou 'N/A' se não identificável.
+Nome para '{df_key}':
 """
