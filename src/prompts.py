@@ -1,70 +1,68 @@
 import json
 
-SYSTEM_PROMPT_AGENT_1 = """
-Você é um agente especializado em padronização de dados de planilhas Excel.
-Sua tarefa é receber um diretório, carregar todas as planilhas Excel (.xlsx) nele contidas,
-e usar suas capacidades de IA para padronizar os nomes das colunas de cada planilha
-com base em um conjunto pré-definido de nomes canônicos e suas descrições.
-Após a padronização, os dados devem ser disponibilizados para um segundo agente de análise.
-Use a ferramenta 'standardize_spreadsheets_tool' para realizar esta tarefa.
-Explique brevemente seu plano antes de chamar a ferramenta.
-"""
-
 SYSTEM_PROMPT_AGENT_2 = """
-Você é um agente de análise de custos que opera sobre dados organizacionais JÁ CARREGADOS E PADRONIZADOS (pelo Agente 1).
-Sua principal função é realizar cálculos de custos por colaborador e gerar relatórios.
-Use a ferramenta 'analyze_all_costs_tool' para realizar a análise e os cálculos.
-Depois, se solicitado, use 'save_processed_data_tool' para salvar o relatório.
-Sempre explique seu raciocínio antes de agir.
+Você é um orquestrador de análise de custos de RH. Siga EXATAMENTE ESTES PASSOS:
+
+1. Consolidar dados usando `consolidate_all_data_tool`
+   - Usar IA para nomes de colunas específicas
+   - Gerar DataFrame intermediário
+
+2. Calcular custos totais com `calculate_employee_total_cost_tool`
+
+**REGRAS ABSOLUTAS:**
+- Execute APENAS essas 2 ferramentas NA ORDEM
+- Após o passo 2, ENCERRE IMEDIATAMENTE com "FINAL ANSWER"
+- Nunca tente acessar dados diretamente
+- Não adicione comentários após o cálculo final
+
+Exemplo correto:
+Usuário: Analise os custos
+Pensamento: Primeiro consolidar dados...
+Ação: consolidate_all_data_tool
+Observação: Consolidação completa
+Pensamento: Agora calcular totais...
+Ação: calculate_employee_total_cost_tool
+Observação: Cálculo finalizado
+**FINAL ANSWER**: Análise concluída. Resultados prontos para exportação.
 """
 
 
 def get_standardize_dataframe_prompt(
     file_name_stem: str, original_columns: list, canonical_names: dict
-):
-
+) -> str:
     canonical_names_json_string = json.dumps(
         canonical_names, ensure_ascii=False, indent=2
     )
+    first_original_column_example = (
+        original_columns[0] if original_columns else "a_coluna_original_apropriada"
+    )
 
     return f"""
-Sua tarefa é extrair informações relevantes de colunas de um arquivo Excel e mapeá-las para um conjunto de NOMES DE COLUNA PADRÃO VÁLIDOS.
-O arquivo se chama: '{file_name_stem}'.
-As colunas ORIGINAIS e EXATAS neste arquivo são: {original_columns}. Use estes nomes EXATOS como chaves no JSON de resposta.
+Sua tarefa é mapear as colunas ORIGINAIS do arquivo Excel '{file_name_stem}' (colunas: {original_columns}) para os NOMES DE COLUNA PADRÃO VÁLIDOS listados abaixo.
 
-Abaixo está a LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS (e suas descrições) para os quais você deve mapear as colunas originais. Use estes nomes EXATOS como valores no JSON:
+LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS (com descrições):
 {canonical_names_json_string}
 
-Instruções CRÍTICAS para o mapeamento:
-1.  Primeiro, identifique a natureza geral do arquivo (Salário, Benefício, Ferramenta, etc.) a partir do nome do arquivo ('{file_name_stem}') e das colunas originais.
+Instruções de Mapeamento:
+1.  Identifique a natureza do arquivo ('{file_name_stem}') e use as descrições dos nomes padrão para guiar seu mapeamento.
+2.  Para arquivos de BENEFÍCIOS/FERRAMENTAS:
+    a.  "Nome do Item": Mapeie uma coluna ORIGINAL descritiva (ex: 'Plano Contratado', 'Rubrica') para "Nome do Item". Para arquivos de item único (ex: 'Planilha Google Workspace') sem coluna descritiva explícita, você DEVE mapear uma coluna original existente (ex: '{first_original_column_example}') para "Nome do Item"; o sistema usará o nome do arquivo '{file_name_stem}' para popular o valor posteriormente se necessário. Se o arquivo não for um benefício/ferramenta (ex: 'Dados Colaboradores'), omita "Nome do Item".
+    b.  "Tipo do Item": Similarmente, mapeie uma coluna de tipo ou infira e use um placeholder de coluna original se necessário.
+    c.  "Data de Ativacao do Item": Para datas de ativação/início.
+    d.  "Custo Mensal do Item": Para colunas de CUSTO MENSAL/TOTAL numérico (ex: 'Valor Mensal', 'Total').
+3.  CASOS ESPECIAIS (ex: Github):
+    # Mantenha esta seção SE você ainda usa "Custo Copilot Github", etc., como canônicos.
+    # Se Github usa o modelo genérico "Nome do Item" (ex: "Github - Copilot"), esta seção precisa refletir isso.
+    * Para arquivos 'Github' com colunas de custo para 'Copilot' ou 'Licença Base', use os canônicos específicos "Custo Copilot Github" ou "Custo Licenca Base Github" SE ELES EXISTIREM na lista de nomes padrão acima. Caso contrário, trate-os como outros itens genéricos para "Nome do Item" e "Custo Mensal do Item".
+4.  DADOS DO COLABORADOR: Mapeie para "CPF Colaborador", "Nome Colaborador", "Centro de Custo", "Salario".
+5.  OMISSÃO: Se uma coluna ORIGINAL não tiver um mapeamento claro para um nome padrão válido, OMITE-A do JSON.
 
-2.  MAPEAMENTO PADRÃO PARA A MAIORIA DOS ARQUIVOS DE BENEFÍCIOS E FERRAMENTAS:
-    a.  Para colunas que descrevem o nome específico do plano, serviço ou licença (ex: 'Plano Dental Prata', 'Licença Photoshop CC', 'AWS EC2 Instance m5.large'), mapeie para "Nome do Item". Use também o nome do arquivo '{file_name_stem}' para ajudar a formar um 'Nome do Item' descritivo (ex: "Unimed - Plano Prata", "AWS - EC2 Instance m5.large").
-    b.  Para colunas que indicam o tipo geral do benefício ou ferramenta (ex: 'Plano de Saúde', 'Software', 'Serviço Cloud'), mapeie para "Tipo do Item". Se não houver coluna de tipo, tente inferir um tipo geral a partir do 'Nome do Item' ou do nome do arquivo.
-    c.  Para colunas de data de início ou ativação, mapeie para "Data de Ativacao do Item".
-    d.  Para colunas que representam o CUSTO MENSAL principal ou TOTAL do item descrito (geralmente chamadas 'Valor Mensal', 'Total', 'Custo Total', 'Montante Final', 'Mensalidade'), mapeie para "Custo Mensal do Item". Certifique-se que esta coluna seja puramente numérica e represente o valor monetário.
+FORMATO JSON OBRIGATÓRIO - CRÍTICO:
+- As CHAVES DEVEM ser os nomes das colunas ORIGINAIS (de: {original_columns}).
+- Os VALORES DEVEM ser NOMES DE COLUNA PADRÃO VÁLIDOS (da lista acima).
+- Responda APENAS com o objeto JSON. SEM texto adicional, comentários ou markdown.
 
-3.  CASOS ESPECIAIS (use com moderação, somente se aplicável):
-    # * Se o arquivo for claramente sobre 'Github' e contiver colunas distintas para custos de 'Copilot' e 'Licença Base', 
-
-4.  DADOS DO COLABORADOR: Para colunas de identificação (CPF, Nome), departamento e salário base, use "CPF Colaborador", "Nome Colaborador", "Centro de Custo", "Salario".
-
-5.  OMISSÃO: Se uma coluna ORIGINAL não se encaixar claramente em NENHUM dos nomes padrão válidos conforme as instruções acima, OMITE-A do dicionário JSON. Não invente mapeamentos.
-
-Formato OBRIGATÓRIO da Resposta:
-Responda ÚNICA E EXCLUSIVAMENTE com um objeto JSON.
-As CHAVES do dicionário JSON DEVEM SER NOMES EXATOS da lista de colunas ORIGINAIS fornecida ({original_columns}).
-Os VALORES do dicionário JSON DEVEM SER NOMES EXATOS da LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS.
-NÃO inclua NENHUMA palavra, introdução, explicação, comentário, ou blocos de markdown.
-A sua resposta DEVE SER ESTRITAMENTE O DICIONÁRIO JSON, e nada mais.
-
-Exemplo (arquivo 'Beneficio_Plano_Saude_Empresa.xlsx', colunas originais ['Matrícula', 'Nome Completo', 'Plano Contratado', 'Valor Mensalidade', 'Obs']):
-{{
-    "Nome Completo": "Nome Colaborador",
-    "Plano Contratado": "Nome do Item","
-    "Valor Mensalidade": "Custo Mensal do Item"
-}}
-(Neste exemplo, 'Matrícula' e 'Obs' foram omitidas. 'Tipo do Item' poderia ser inferido como 'Plano de Saúde').
+Mapeamento JSON para '{file_name_stem}':
 """
 
 
