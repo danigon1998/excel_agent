@@ -60,3 +60,5 @@ Este projeto utiliza inteligência artificial (LLMs via API Groq) para automatiz
     * O relatório final em Excel será gerado no diretório `data/output/` (o nome exato do arquivo é definido em `main.py`, por exemplo, `relatorio_final_pipeline.xlsx`).
 
 ---
+
+# Para mais detalhes, olhar a wiki que esta neste repositorio

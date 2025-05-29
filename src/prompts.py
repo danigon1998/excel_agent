@@ -31,38 +31,37 @@ def get_standardize_dataframe_prompt(
     file_name_stem: str, original_columns: list, canonical_names: dict
 ) -> str:
     canonical_names_json_string = json.dumps(
-        canonical_names, ensure_ascii=False, indent=2
-    )
-    first_original_column_example = (
-        original_columns[0] if original_columns else "a_coluna_original_apropriada"
+        canonical_names, ensure_ascii=False, separators=(",", ":")
     )
 
     return f"""
-Sua tarefa é mapear as colunas ORIGINAIS do arquivo Excel '{file_name_stem}' (colunas: {original_columns}) para os NOMES DE COLUNA PADRÃO VÁLIDOS listados abaixo.
+Mapeie colunas de '{file_name_stem}' para nomes padrão usando estas regras:
 
-LISTA DE NOMES DE COLUNA PADRÃO VÁLIDOS (com descrições):
-{canonical_names_json_string}
+**COLUNAS ORIGINAIS:** {original_columns}
+**NOMES VÁLIDOS (JSON):** {canonical_names_json_string}
 
-Instruções de Mapeamento:
-1.  Identifique a natureza do arquivo ('{file_name_stem}') e use as descrições dos nomes padrão para guiar seu mapeamento.
-2.  Para arquivos de BENEFÍCIOS/FERRAMENTAS:
-    a.  "Nome do Item": Mapeie uma coluna ORIGINAL descritiva (ex: 'Plano Contratado', 'Rubrica') para "Nome do Item". Para arquivos de item único (ex: 'Planilha Google Workspace') sem coluna descritiva explícita, você DEVE mapear uma coluna original existente (ex: '{first_original_column_example}') para "Nome do Item"; o sistema usará o nome do arquivo '{file_name_stem}' para popular o valor posteriormente se necessário. Se o arquivo não for um benefício/ferramenta (ex: 'Dados Colaboradores'), omita "Nome do Item".
-    b.  "Tipo do Item": Similarmente, mapeie uma coluna de tipo ou infira e use um placeholder de coluna original se necessário.
-    c.  "Data de Ativacao do Item": Para datas de ativação/início.
-    d.  "Custo Mensal do Item": Para colunas de CUSTO MENSAL/TOTAL numérico (ex: 'Valor Mensal', 'Total').
-3.  CASOS ESPECIAIS (ex: Github):
-    # Mantenha esta seção SE você ainda usa "Custo Copilot Github", etc., como canônicos.
-    # Se Github usa o modelo genérico "Nome do Item" (ex: "Github - Copilot"), esta seção precisa refletir isso.
-    * Para arquivos 'Github' com colunas de custo para 'Copilot' ou 'Licença Base', use os canônicos específicos "Custo Copilot Github" ou "Custo Licenca Base Github" SE ELES EXISTIREM na lista de nomes padrão acima. Caso contrário, trate-os como outros itens genéricos para "Nome do Item" e "Custo Mensal do Item".
-4.  DADOS DO COLABORADOR: Mapeie para "CPF Colaborador", "Nome Colaborador", "Centro de Custo", "Salario".
-5.  OMISSÃO: Se uma coluna ORIGINAL não tiver um mapeamento claro para um nome padrão válido, OMITE-A do JSON.
+**REGRAS ABSOLUTAS:**
+1. Para BENEFÍCIOS/FERRAMENTAS:
+   - "Nome do Item": Mapeie coluna descritiva OU primeira coluna
+   - "Custo Mensal do Item": SÓ para custos recorrentes (ex: 'Valor Mensal')
+   - Ignore: parcelas, descontos e custos únicos
 
-FORMATO JSON OBRIGATÓRIO - CRÍTICO:
-- As CHAVES DEVEM ser os nomes das colunas ORIGINAIS (de: {original_columns}).
-- Os VALORES DEVEM ser NOMES DE COLUNA PADRÃO VÁLIDOS (da lista acima).
-- Responda APENAS com o objeto JSON. SEM texto adicional, comentários ou markdown.
+2. Para COLABORADORES:
+   - Mapeie para: CPF, Nome, Centro de Custo, Salario
 
-Mapeamento JSON para '{file_name_stem}':
+3. Casos especiais (GitHub):
+   - Use nomes específicos se existirem
+
+4. Se não houver mapeamento claro: OMITA a coluna
+
+**EXEMPLOS CRÍTICOS:**
+- 'Valor Mensal' → "Custo Mensal do Item" (✔️)
+- 'Valor Parcela' → OMITA (❌ a menos que seja recorrente)
+- 'Total' → "Custo Mensal do Item" (✔️ se mensal)
+
+**FORMATO:** {{"Coluna_Original": "Nome_Padrao"}}
+
+APENAS JSON para '{file_name_stem}':
 """
 
 
