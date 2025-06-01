@@ -171,12 +171,3 @@ def calculate_total_cost_per_collaborator(consolidated_df: pd.DataFrame):
 
     print("Custo total por colaborador calculado")
     return consolidated_df
-
-
-def perform_full_cost_analysis(dataframes_dict: dict):
-    consolidated_df = consolidate_all_cost(dataframes_dict)
-    if consolidated_df.empty:
-        print("Erro: DataFrame consolidado está vazio.")
-        return pd.DataFrame()
-    consolidated_df = calculate_total_cost_per_collaborator(consolidated_df)
-    return consolidated_df
