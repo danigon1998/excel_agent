@@ -61,4 +61,4 @@ Este projeto utiliza inteligência artificial (LLMs via API Groq) para automatiz
 
 ---
 
-# Para mais detalhes, olhar a wiki que esta neste repositorio
+## Para mais detalhes, olhar a wiki que esta neste repositorio, onde se encontra a documentação e um video mostrando o que aparece no terminal e o arquivo gerado na pasta output
